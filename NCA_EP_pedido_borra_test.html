@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Pedidos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --light-bg: #f8f9fa;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        h1 { text-align: center; color: var(--primary-color); }
+        
+        /* Formulario Cliente */
+        .client-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            padding: 20px;
+            background-color: #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        /* Tabla */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        
+        /* Cabecera de Nivel */
+        .level-header {
+            background-color: var(--accent-color);
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        /* Input Cantidad */
+        input.qty-input {
+            width: 80px;
+            padding: 5px;
+            text-align: center;
+            font-size: 1.1em;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+        }
+        input.qty-input:focus {
+            border-color: var(--accent-color);
+            background-color: #e8f4fd;
+            outline: none;
+        }
+
+        /* Botones Flotantes */
+        .actions-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: white;
+            padding: 15px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            z-index: 1000;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+            font-size: 16px;
+        }
+        .btn-save { background-color: #27ae60; } /* Verde */
+        .btn-csv { background-color: #e67e22; }  /* Naranja */
+        .btn-pdf { background-color: #c0392b; }  /* Rojo Oscuro */
+        .btn-clear { background-color: #7f8c8d; } /* Gris */
+        
+        .btn:hover { opacity: 0.9; }
+
+        /* Loader */
+        #loader { text-align: center; font-size: 1.2em; padding: 20px; font-weight: bold; }
+        .error-msg { color: red; background: #ffe6e6; padding: 10px; border-radius: 5px; display: inline-block;}
+        
+        /* Padding para que la barra de botones no tape el contenido */
+        .spacer { height: 80px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>NCA EP - Pedido</h1>
+
+    <div class="client-form">
+        <div class="form-group">
+            <label for="sector">SECTOR</label>
+            <select id="sector" onchange="autoSave()">
+                <option value="">-- Selecciona --</option>
+                <option value="ANDALUCÍA">ANDALUCÍA</option>
+                <option value="BILBAO">BILBAO</option>
+                <option value="CATALUÑA">CATALUÑA</option>
+                <option value="MADRID">MADRID</option>
+                <option value="VALENCIA-PALMA">VALENCIA-PALMA</option>
+                <option value="VALLADOLID">VALLADOLID</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="colegio">COLEGIO</label>
+            <input type="text" id="colegio" placeholder="Nombre del colegio" oninput="autoSave()">
+        </div>
+        <div class="form-group">
+            <label for="localidad">LOCALIDAD</label>
+            <input type="text" id="localidad" placeholder="Ciudad / Localidad" oninput="autoSave()">
+        </div>
+    </div>
+
+    <div id="loader">Cargando catálogo...</div>
+    <div id="catalog-container"></div>
+    <div class="spacer"></div>
+</div>
+
+<div class="actions-bar">
+    <button class="btn btn-save" onclick="manualSave()">💾 Guardar</button>
+    <button class="btn btn-clear" onclick="clearAll()">🗑️ Borrar Todo</button>
+    <button class="btn btn-csv" onclick="downloadCSV()">⬇ CSV</button>
+    <button class="btn btn-pdf" onclick="downloadPDF()">📄 PDF</button>
+</div>
+
+<script>
+    // CONFIGURACIÓN DE URL Y PROXY
+    const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQRO01n2RUz3Y6yWRHOHNcKdJCBfR2X77YqW43nqBkPBZ3Rc0y-DsK-mU5Vzn1I-DSWFefh6QXBcWjM/pub?output=csv';
+    const PROXY_URL = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(GOOGLE_SHEET_URL);
+
+    let globalData = [];
+    let headers = [];
+
+    // --- 1. Inicialización ---
+    document.addEventListener('DOMContentLoaded', () => {
+        loadClientData();
+        fetchData();
+    });
+
+    // --- 2. Obtener Datos ---
+    function fetchData() {
+        Papa.parse(PROXY_URL, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                if (results.data && results.data.length > 0) {
+                    globalData = results.data;
+                    headers = results.meta.fields;
+                    renderTable(globalData);
+                    document.getElementById('loader').style.display = 'none';
+                    loadSavedQuantities();
+                } else {
+                    showError("El archivo CSV parece estar vacío o hubo un error de lectura.");
+                }
+            },
+            error: function(err) {
+                console.error(err);
+                showError("Error de conexión: No se pudo descargar el CSV. Verifica tu internet.");
+            }
+        });
+    }
+
+    function showError(msg) {
+        const loader = document.getElementById('loader');
+        loader.innerHTML = `<div class="error-msg">⚠️ ${msg}</div>`;
+    }
+
+    // --- 3. Renderizar Tabla ---
+    function renderTable(data) {
+        const container = document.getElementById('catalog-container');
+        const table = document.createElement('table');
+        
+        // Agrupar por NIVEL
+        const grouped = {};
+        data.forEach((row, index) => {
+            let nivelKey = Object.keys(row).find(k => k.toUpperCase().includes('NIVEL')) || 'OTROS';
+            const nivel = row[nivelKey] || 'General';
+            
+            if (!grouped[nivel]) grouped[nivel] = [];
+            row._originalIndex = index;
+            grouped[nivel].push(row);
+        });
+
+        // Cabeceras
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        
+        let displayHeaders = headers.filter(h => !h.toUpperCase().includes('NIVEL'));
+        
+        displayHeaders.forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            headerRow.appendChild(th);
+        });
+        
+        const thQty = document.createElement('th');
+        thQty.textContent = "CANTIDAD";
+        thQty.style.width = "100px";
+        headerRow.appendChild(thQty);
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+
+        for (const [level, items] of Object.entries(grouped)) {
+            const trLevel = document.createElement('tr');
+            const tdLevel = document.createElement('td');
+            tdLevel.colSpan = displayHeaders.length + 1;
+            tdLevel.textContent = level;
+            tdLevel.className = 'level-header';
+            trLevel.appendChild(tdLevel);
+            tbody.appendChild(trLevel);
+
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                
+                displayHeaders.forEach(h => {
+                    const td = document.createElement('td');
+                    td.textContent = item[h];
+                    tr.appendChild(td);
+                });
+
+                const tdQty = document.createElement('td');
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = '0';
+                input.className = 'qty-input';
+                input.dataset.idx = item._originalIndex;
+                input.id = `qty-${item._originalIndex}`;
+                input.oninput = autoSave;
+                
+                tdQty.appendChild(input);
+                tr.appendChild(tdQty);
+                tbody.appendChild(tr);
+            });
+        }
+
+        table.appendChild(tbody);
+        container.appendChild(table);
+    }
+
+    // --- 4. Gestión del Estado ---
+    function autoSave() {
+        const state = {
+            sector: document.getElementById('sector').value,
+            colegio: document.getElementById('colegio').value,
+            localidad: document.getElementById('localidad').value,
+            quantities: {}
+        };
+
+        const inputs = document.querySelectorAll('.qty-input');
+        inputs.forEach(input => {
+            if (input.value && input.value > 0) {
+                state.quantities[input.dataset.idx] = input.value;
+            }
+        });
+
+        localStorage.setItem('pedidoApp_v1', JSON.stringify(state));
+    }
+
+    function manualSave() {
+        autoSave();
+        alert('Progreso guardado correctamente.');
+    }
+
+    // --- NUEVA FUNCIÓN: BORRAR TODO ---
+    function clearAll() {
+        if (confirm("¿Estás seguro de que quieres borrar TODAS las cantidades? Esta acción no se puede deshacer.")) {
+            const inputs = document.querySelectorAll('.qty-input');
+            inputs.forEach(input => {
+                input.value = ''; // Vaciar visualmente
+            });
+            autoSave(); // Actualizar almacenamiento vacío
+        }
+    }
+
+    function loadClientData() {
+        const saved = JSON.parse(localStorage.getItem('pedidoApp_v1'));
+        if (saved) {
+            document.getElementById('sector').value = saved.sector || "";
+            document.getElementById('colegio').value = saved.colegio || "";
+            document.getElementById('localidad').value = saved.localidad || "";
+        }
+    }
+
+    function loadSavedQuantities() {
+        const saved = JSON.parse(localStorage.getItem('pedidoApp_v1'));
+        if (saved && saved.quantities) {
+            for (const [idx, qty] of Object.entries(saved.quantities)) {
+                const input = document.querySelector(`input[data-idx="${idx}"]`);
+                if (input) input.value = qty;
+            }
+        }
+    }
+
+    // --- Helper para generar nombre de archivo ---
+    function getFileName(extension) {
+        const sector = document.getElementById('sector').value || "SIN-SECTOR";
+        const colegio = document.getElementById('colegio').value || "SIN-COLEGIO";
+        const localidad = document.getElementById('localidad').value || "SIN-LOCALIDAD";
+        return `${sector}_${colegio}_${localidad}.${extension}`;
+    }
+
+    // --- 5. Descargar CSV ---
+    function downloadCSV() {
+        const sector = document.getElementById('sector').value;
+        const colegio = document.getElementById('colegio').value;
+        const localidad = document.getElementById('localidad').value;
+
+        if(!colegio || !localidad || !sector) {
+            alert("Por favor, rellena Sector, Colegio y Localidad antes de descargar.");
+            return;
+        }
+
+        const rows = [];
+        const csvHeaders = ['SECTOR', 'COLEGIO', 'LOCALIDAD', ...headers, 'CANTIDAD_PEDIDA'];
+        rows.push(csvHeaders);
+
+        const inputs = document.querySelectorAll('.qty-input');
+        inputs.forEach(input => {
+            const val = parseInt(input.value);
+            if (val > 0) {
+                const itemIdx = input.dataset.idx;
+                const originalItem = globalData[itemIdx];
+                
+                const rowData = [
+                    sector, 
+                    colegio, 
+                    localidad,
+                    ...headers.map(h => originalItem[h]),
+                    val
+                ];
+                rows.push(rowData);
+            }
+        });
+
+        if (rows.length === 1) {
+            alert("No has seleccionado ninguna cantidad.");
+            return;
+        }
+
+        const csvContent = Papa.unparse(rows);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        
+        link.setAttribute("href", url);
+        link.setAttribute("download", getFileName("csv"));
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // --- 6. Descargar PDF ---
+    function downloadPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const sector = document.getElementById('sector').value;
+        const colegio = document.getElementById('colegio').value;
+        const localidad = document.getElementById('localidad').value;
+
+        if(!colegio || !localidad || !sector) {
+            alert("Por favor, rellena Sector, Colegio y Localidad antes de descargar.");
+            return;
+        }
+
+        doc.setFontSize(18);
+        doc.text("NCA EP PEDIDO REALIZADO", 14, 20);
+        
+        doc.setFontSize(11);
+        doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 30);
+        doc.text(`Sector: ${sector}`, 14, 36);
+        doc.text(`Colegio: ${colegio}`, 14, 42);
+        doc.text(`Localidad: ${localidad}`, 14, 48);
+
+        const head = [headers.concat(['CANTIDAD'])];
+        const body = [];
+        let hasItems = false;
+
+        const inputs = document.querySelectorAll('.qty-input');
+        inputs.forEach(input => {
+            const val = parseInt(input.value);
+            if (val > 0) {
+                hasItems = true;
+                const itemIdx = input.dataset.idx;
+                const originalItem = globalData[itemIdx];
+                const row = headers.map(h => originalItem[h]).concat([val]);
+                body.push(row);
+            }
+        });
+
+        if (!hasItems) {
+            alert("No hay items seleccionados para el PDF.");
+            return;
+        }
+
+        doc.autoTable({
+            startY: 55,
+            head: head,
+            body: body,
+            theme: 'grid',
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [44, 62, 80] },
+        });
+
+        doc.save(getFileName("pdf"));
+    }
+</script>
+
+</body>
+</html>
